@@ -9,6 +9,9 @@ export interface TrustScoreResult {
   walletInfo: WalletInfo;
   analyzedAt: string;
   isFallbackMode: boolean;
+  rpcStatus: 'success' | 'failure';
+  dataMode: 'REAL_OPN_DATA' | 'FALLBACK_DEMO_MODE';
+  isPartial: boolean;
 }
 
 export interface ScoreCategories {
@@ -47,6 +50,19 @@ export interface WalletInfo {
   firstTransactionDate?: string;
   lastTransactionDate?: string;
   ageInDays?: number;
+  chainId?: number;
+  latestBlock?: number;
+}
+
+export interface AnalyzedWalletData {
+  address: string;
+  balance: string;
+  formattedBalance: string;
+  chainId: number | 'Unavailable from RPC';
+  latestBlock: number | 'Unavailable from RPC';
+  transactionCount: number | 'Unavailable from RPC';
+  rpcStatus: 'success' | 'failure';
+  dataMode: 'REAL_OPN_DATA' | 'FALLBACK_DEMO_MODE';
 }
 
 export interface OPNChainConfig {

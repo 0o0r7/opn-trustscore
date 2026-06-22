@@ -3,9 +3,9 @@ import { motion } from 'framer-motion';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { calculateTrustScore } from '@/lib/trustScoreEngine';
-import { getAddressExplorerUrl } from '@/lib/opn';
-import type { TrustScoreResult } from '@/types';
-import { useMemo } from 'react';
+import { getAddressExplorerUrl, analyzeWallet } from '@/lib/opn';
+import type { TrustScoreResult, AnalyzedWalletData } from '@/types';
+import { useMemo, useState, useEffect } from 'react';
 import {
   Shield,
   ArrowLeft,
@@ -22,7 +22,11 @@ import {
   Lightbulb,
   ChevronRight,
   Info,
-  Share2
+  Share2,
+  Loader2,
+  Zap,
+  Box,
+  Hash
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -190,11 +194,41 @@ function BadgeCard({ badge, index }: { badge: { id: string; name: string; descri
 
 export default function Dashboard() {
   const { address } = useParams<{ address: string }>();
+  const [rpcData, setRpcData] = useState<AnalyzedWalletData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchWalletData() {
+      if (!address) return;
+      setIsLoading(true);
+      try {
+        const data = await analyzeWallet(address);
+        setRpcData(data);
+      } catch (err) {
+        console.error('Failed to fetch wallet data:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchWalletData();
+  }, [address]);
   
   const result: TrustScoreResult = useMemo(() => {
     if (!address) return null as unknown as TrustScoreResult;
-    return calculateTrustScore(address);
-  }, [address]);
+    return calculateTrustScore(address, rpcData || undefined);
+  }, [address, rpcData]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#06060f] text-white flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-purple-500 animate-spin mx-auto mb-4" />
+          <h2 className="text-xl font-bold mb-2">Analyzing Wallet...</h2>
+          <p className="text-gray-400">Fetching real-time OPN Chain data</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!address || !result) {
     return (
@@ -250,12 +284,36 @@ export default function Dashboard() {
                 </div>
               </div>
               
-              {result.isFallbackMode && (
-                <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                  <Info className="w-4 h-4 text-yellow-400" />
-                  <span className="text-xs text-yellow-400">Fallback Demo Mode</span>
+              <div className="flex flex-wrap gap-2">
+                <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg ${
+                  result.dataMode === 'REAL_OPN_DATA'
+                    ? 'bg-green-500/10 border border-green-500/20'
+                    : 'bg-yellow-500/10 border border-yellow-500/20'
+                }`}>
+                  {result.dataMode === 'REAL_OPN_DATA' ? (
+                    <>
+                      <Zap className="w-4 h-4 text-green-400" />
+                      <span className="text-xs text-green-400 font-bold">REAL OPN DATA</span>
+                    </>
+                  ) : (
+                    <>
+                      <Info className="w-4 h-4 text-yellow-400" />
+                      <span className="text-xs text-yellow-400 font-bold">FALLBACK DEMO MODE</span>
+                    </>
+                  )}
                 </div>
-              )}
+
+                <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg ${
+                  result.rpcStatus === 'success'
+                    ? 'bg-blue-500/10 border border-blue-500/20'
+                    : 'bg-red-500/10 border border-red-500/20'
+                }`}>
+                  <Activity className={`w-4 h-4 ${result.rpcStatus === 'success' ? 'text-blue-400' : 'text-red-400'}`} />
+                  <span className={`text-xs font-bold ${result.rpcStatus === 'success' ? 'text-blue-400' : 'text-red-400'}`}>
+                    RPC: {result.rpcStatus.toUpperCase()}
+                  </span>
+                </div>
+              </div>
             </div>
           </motion.div>
 
@@ -280,7 +338,9 @@ export default function Dashboard() {
               
               <div className="flex-1 text-center md:text-left">
                 <div className="flex items-center justify-center md:justify-start gap-3 mb-2">
-                  <h2 className="text-2xl font-bold">TrustScore</h2>
+                  <h2 className="text-2xl font-bold">
+                    {result.isPartial ? 'Partial TrustScore' : 'TrustScore'}
+                  </h2>
                   <span
                     className="px-3 py-1 rounded-full text-xs font-semibold"
                     style={{ 
@@ -291,6 +351,11 @@ export default function Dashboard() {
                   >
                     {result.riskLevel} Risk
                   </span>
+                  {result.isPartial && (
+                    <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                      RPC ONLY
+                    </span>
+                  )}
                 </div>
                 
                 <p className="text-sm text-gray-400 mb-4 leading-relaxed max-w-xl">
@@ -337,16 +402,45 @@ export default function Dashboard() {
             </div>
             
             {/* Wallet Info Bar */}
-            <div className="mt-6 pt-6 border-t border-white/5 grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="mt-6 pt-6 border-t border-white/5 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               {[
-                { label: 'Balance', value: `${Number(result.walletInfo.balance).toFixed(2)} OPN` },
-                { label: 'Transactions', value: String(result.walletInfo.transactionCount) },
-                { label: 'Wallet Age', value: `${result.walletInfo.ageInDays} days` },
-                { label: 'First Active', value: result.walletInfo.firstTransactionDate },
+                {
+                  label: 'Balance',
+                  value: result.walletInfo.balance ? `${Number(result.walletInfo.balance).toFixed(4)} OPN` : 'Unavailable',
+                  icon: Wallet
+                },
+                {
+                  label: 'Tx Count / Nonce',
+                  value: result.walletInfo.transactionCount !== undefined ? String(result.walletInfo.transactionCount) : 'Unavailable from RPC',
+                  icon: Hash
+                },
+                {
+                  label: 'Chain ID',
+                  value: result.walletInfo.chainId !== undefined ? String(result.walletInfo.chainId) : 'Unavailable from RPC',
+                  icon: Activity
+                },
+                {
+                  label: 'Latest Block',
+                  value: result.walletInfo.latestBlock !== undefined ? String(result.walletInfo.latestBlock) : 'Unavailable from RPC',
+                  icon: Box
+                },
+                {
+                  label: 'Wallet Age',
+                  value: result.walletInfo.ageInDays !== undefined ? `${result.walletInfo.ageInDays} days` : 'Unavailable from RPC',
+                  icon: Clock
+                },
+                {
+                  label: 'First Active',
+                  value: result.walletInfo.firstTransactionDate || 'Unavailable from RPC',
+                  icon: TrendingUp
+                },
               ].map((info, i) => (
                 <div key={i} className="text-center md:text-left">
-                  <div className="text-xs text-gray-500 mb-1">{info.label}</div>
-                  <div className="text-sm font-medium text-white">{info.value}</div>
+                  <div className="text-[10px] text-gray-500 mb-1 uppercase tracking-wider flex items-center justify-center md:justify-start gap-1">
+                    <info.icon className="w-3 h-3" />
+                    {info.label}
+                  </div>
+                  <div className="text-xs font-medium text-white truncate" title={info.value}>{info.value}</div>
                 </div>
               ))}
             </div>

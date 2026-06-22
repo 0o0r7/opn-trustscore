@@ -253,15 +253,29 @@ npx hardhat run scripts/deploy.ts --network opn-testnet
 
 Update the `NEXT_PUBLIC_TRUSTSCORE_REGISTRY_ADDRESS` environment variable with the deployed address.
 
-## Fallback Demo Mode
+## Real OPN Data vs. Fallback Demo Mode
 
-When real OPN Chain APIs are unavailable, the application operates in "Fallback Demo Mode":
-- Scores are deterministically generated from the wallet address hash
-- Each address produces consistent, unique results
-- The dashboard clearly displays a "Fallback Demo Mode" indicator
-- No mock data is presented as real
+The application is designed to use real on-chain data from the OPN RPC whenever possible.
 
-This ensures the application is always functional for demonstrations while being transparent about data sources.
+### Real OPN Data Mode
+When `NEXT_PUBLIC_OPN_RPC_URL` is configured and the RPC is reachable:
+- **Real Data Fetched:** Native token balance, transaction count (nonce), chain ID, and latest block number.
+- **Partial TrustScore:** Since some categories (like wallet age or ecosystem participation) require an explorer API or indexed data not available via standard RPC, the TrustScore is calculated as a **Partial TrustScore** based only on available real data.
+- **Unavailable Fields:** Fields like "Wallet Age" or "First Active" will be marked as `Unavailable from RPC`.
+- **Badge:** A `REAL OPN DATA` badge is displayed.
+
+### Fallback Demo Mode
+The application operates in "Fallback Demo Mode" if the RPC fails or if it's intentionally disabled:
+- **Deterministic Data:** Scores and wallet values are deterministically generated from the wallet address hash.
+- **Consistency:** Each address produces consistent, unique results for demonstration purposes.
+- **Badge:** A `FALLBACK DEMO MODE` badge is displayed.
+
+### Testing Wallet Balance
+To verify that real data is being used:
+1. Set `NEXT_PUBLIC_OPN_RPC_URL` in your `.env` file.
+2. Enter a wallet address that has a known balance on the OPN Testnet.
+3. Observe the "Balance" field in the Dashboard; it should match the on-chain balance.
+4. Check for the `REAL OPN DATA` badge and `RPC: SUCCESS` indicator.
 
 ## Future Roadmap
 

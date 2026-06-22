@@ -1,6 +1,7 @@
-import { type OPNChainConfig } from '@/types';
+import { type OPNChainConfig, type AnalyzedWalletData } from '@/types';
 import { http, createConfig } from 'wagmi';
 import { injected } from 'wagmi/connectors';
+import { createPublicClient, formatEther, type Address } from 'viem';
 
 /**
  * OPN Chain Configuration
@@ -48,9 +49,74 @@ export const wagmiConfig = createConfig({
   chains: [opnWagmiChain],
   connectors: [injected()],
   transports: {
-    [opnWagmiChain.id]: http(opnTestnet.rpcUrls.default.http[0]),
+    [opnWagmiChain.id]: http(import.meta.env.NEXT_PUBLIC_OPN_RPC_URL || opnTestnet.rpcUrls.default.http[0]),
   },
 });
+
+/**
+ * Public Client for direct RPC calls
+ */
+export const publicClient = createPublicClient({
+  chain: opnWagmiChain,
+  transport: http(import.meta.env.NEXT_PUBLIC_OPN_RPC_URL || opnTestnet.rpcUrls.default.http[0]),
+});
+
+/**
+ * RPC Functions
+ */
+
+export const getNativeBalance = async (address: string) => {
+  return await publicClient.getBalance({ address: address as Address });
+};
+
+export const getLatestBlock = async () => {
+  return await publicClient.getBlockNumber();
+};
+
+export const getChainId = async () => {
+  return await publicClient.getChainId();
+};
+
+export const getTransactionCount = async (address: string) => {
+  return await publicClient.getTransactionCount({ address: address as Address });
+};
+
+/**
+ * Analyze wallet using real RPC data
+ */
+export const analyzeWallet = async (address: string): Promise<AnalyzedWalletData> => {
+  try {
+    const [balance, txCount, chainId, blockNumber] = await Promise.all([
+      getNativeBalance(address),
+      getTransactionCount(address),
+      getChainId(),
+      getLatestBlock(),
+    ]);
+
+    return {
+      address,
+      balance: balance.toString(),
+      formattedBalance: formatEther(balance),
+      chainId: Number(chainId),
+      latestBlock: Number(blockNumber),
+      transactionCount: Number(txCount),
+      rpcStatus: 'success',
+      dataMode: 'REAL_OPN_DATA',
+    };
+  } catch (error) {
+    console.error('RPC analysis failed:', error);
+    return {
+      address,
+      balance: '0',
+      formattedBalance: '0',
+      chainId: 'Unavailable from RPC',
+      latestBlock: 'Unavailable from RPC',
+      transactionCount: 'Unavailable from RPC',
+      rpcStatus: 'failure',
+      dataMode: 'FALLBACK_DEMO_MODE',
+    };
+  }
+};
 
 /**
  * Explorer API helper - constructs explorer URLs

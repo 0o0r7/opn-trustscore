@@ -3,8 +3,9 @@ import { motion } from 'framer-motion';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { calculateTrustScore } from '@/lib/trustScoreEngine';
-import { getAddressExplorerUrl, formatAddress } from '@/lib/opn';
-import { useMemo } from 'react';
+import { getAddressExplorerUrl, formatAddress, analyzeWallet } from '@/lib/opn';
+import type { AnalyzedWalletData, TrustScoreResult } from '@/types';
+import { useMemo, useState, useEffect } from 'react';
 import {
   Shield,
   ArrowLeft,
@@ -19,7 +20,10 @@ import {
   CheckCircle2,
   Share2,
   Copy,
-  AlertTriangle
+  AlertTriangle,
+  Loader2,
+  Zap,
+  Info
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -34,11 +38,40 @@ const fadeInUp = {
 
 export default function Profile() {
   const { address } = useParams<{ address: string }>();
-  
-  const result = useMemo(() => {
-    if (!address) return null;
-    return calculateTrustScore(address);
+  const [rpcData, setRpcData] = useState<AnalyzedWalletData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchWalletData() {
+      if (!address) return;
+      setIsLoading(true);
+      try {
+        const data = await analyzeWallet(address);
+        setRpcData(data);
+      } catch (err) {
+        console.error('Failed to fetch wallet data for profile:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchWalletData();
   }, [address]);
+
+  const result: TrustScoreResult = useMemo(() => {
+    if (!address) return null as unknown as TrustScoreResult;
+    return calculateTrustScore(address, rpcData || undefined);
+  }, [address, rpcData]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#06060f] text-white flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-purple-500 animate-spin mx-auto mb-4" />
+          <h2 className="text-xl font-bold mb-2">Loading Profile...</h2>
+        </div>
+      </div>
+    );
+  }
 
   if (!address || !result) {
     return (
@@ -122,7 +155,7 @@ export default function Profile() {
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col items-end gap-2">
                   <span
                     className="px-3 py-1.5 rounded-lg text-sm font-bold"
                     style={{ 
@@ -131,8 +164,23 @@ export default function Profile() {
                       border: `1px solid ${scoreColor}44`
                     }}
                   >
-                    {result.overallScore}/100
+                    {result.isPartial ? 'Partial: ' : ''}{result.overallScore}/100
                   </span>
+
+                  <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md ${
+                    result.dataMode === 'REAL_OPN_DATA'
+                      ? 'bg-green-500/10 text-green-400'
+                      : 'bg-yellow-500/10 text-yellow-400'
+                  }`}>
+                    {result.dataMode === 'REAL_OPN_DATA' ? (
+                      <Zap className="w-3 h-3" />
+                    ) : (
+                      <Info className="w-3 h-3" />
+                    )}
+                    <span className="text-[10px] font-bold uppercase tracking-wider">
+                      {result.dataMode.replace(/_/g, ' ')}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -140,12 +188,16 @@ export default function Profile() {
               <div className="mt-6 grid grid-cols-3 gap-4">
                 <div className="glass rounded-lg p-3 text-center">
                   <Clock className="w-4 h-4 text-blue-400 mx-auto mb-1" />
-                  <div className="text-lg font-bold text-white">{result.walletInfo.ageInDays}</div>
+                  <div className="text-lg font-bold text-white">
+                    {result.walletInfo.ageInDays !== undefined ? result.walletInfo.ageInDays : 'N/A'}
+                  </div>
                   <div className="text-[10px] text-gray-500">Days Old</div>
                 </div>
                 <div className="glass rounded-lg p-3 text-center">
                   <Activity className="w-4 h-4 text-purple-400 mx-auto mb-1" />
-                  <div className="text-lg font-bold text-white">{result.walletInfo.transactionCount}</div>
+                  <div className="text-lg font-bold text-white">
+                    {result.walletInfo.transactionCount !== undefined ? result.walletInfo.transactionCount : 'N/A'}
+                  </div>
                   <div className="text-[10px] text-gray-500">Transactions</div>
                 </div>
                 <div className="glass rounded-lg p-3 text-center">

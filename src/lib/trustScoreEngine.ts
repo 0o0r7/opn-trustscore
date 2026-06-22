@@ -1,4 +1,4 @@
-import type { TrustScoreResult, ScoreCategories, Badge, WalletInfo } from '@/types';
+import type { TrustScoreResult, ScoreCategories, Badge, WalletInfo, AnalyzedWalletData } from '@/types';
 import { generateDeterministicData } from './opn';
 
 /**
@@ -27,73 +27,153 @@ const WEIGHTS = {
 
 /**
  * Calculate TrustScore from wallet data
- * Returns deterministic results based on address for consistent demo experience
  */
 export function calculateTrustScore(
   address: string,
-  realData?: {
-    balance?: string;
-    txCount?: number;
-    firstTx?: string;
-    lastTx?: string;
-    ageDays?: number;
-  }
+  rpcData?: AnalyzedWalletData
 ): TrustScoreResult {
+  const balanceNum = rpcData?.formattedBalance ? parseFloat(rpcData.formattedBalance) : 0;
   const { random } = generateDeterministicData(address);
+  const isRealOPN = rpcData?.dataMode === 'REAL_OPN_DATA';
   
-  // Use real data if available, otherwise generate deterministic demo data
-  // Clamp all values to valid ranges
-  const txCount = Math.max(1, realData?.txCount ?? Math.floor(random() * 500) + 1);
-  const ageDays = Math.max(1, realData?.ageDays ?? Math.floor(random() * 730) + 30);
-  const balance = realData?.balance ?? Math.abs(random() * 10000).toFixed(2);
+  // Handle categories based on availability
+  const availableCategories: (keyof ScoreCategories)[] = [];
   
-  const hasRealData = !!realData;
-  
-  // Calculate individual category scores
+  // 1. Wallet Age (Unavailable from RPC)
+  const walletAgeScore = isRealOPN
+    ? { score: 0, weight: 0, isAvailable: false }
+    : { score: calculateWalletAge(Math.floor(random() * 730) + 30, random, false).score, weight: WEIGHTS.walletAge, isAvailable: true };
+  if (walletAgeScore.isAvailable) availableCategories.push('walletAge');
+
+  // 2. Activity Consistency (Depends on Tx Count and Age)
+  const activityConsistencyScore = isRealOPN
+    ? { score: 0, weight: 0, isAvailable: false }
+    : { score: calculateActivityConsistency(Math.floor(random() * 500) + 1, Math.floor(random() * 730) + 30, random, false).score, weight: WEIGHTS.activityConsistency, isAvailable: true };
+  if (activityConsistencyScore.isAvailable) availableCategories.push('activityConsistency');
+
+  // 3. Transaction History (Available from RPC)
+  const txCount = isRealOPN && typeof rpcData.transactionCount === 'number' ? rpcData.transactionCount : undefined;
+  const transactionHistoryScore = txCount !== undefined
+    ? { score: calculateTransactionHistory(txCount, random, true).score, weight: WEIGHTS.transactionHistory, isAvailable: true }
+    : isRealOPN
+      ? { score: 0, weight: 0, isAvailable: false }
+      : { score: calculateTransactionHistory(Math.floor(random() * 500) + 1, random, false).score, weight: WEIGHTS.transactionHistory, isAvailable: true };
+  if (transactionHistoryScore.isAvailable) availableCategories.push('transactionHistory');
+
+  // 4. Ecosystem Participation (Unavailable from RPC)
+  const ecosystemParticipationScore = isRealOPN
+    ? { score: 0, weight: 0, isAvailable: false }
+    : { score: calculateEcosystemParticipation(address, random, false).score, weight: WEIGHTS.ecosystemParticipation, isAvailable: true };
+  if (ecosystemParticipationScore.isAvailable) availableCategories.push('ecosystemParticipation');
+
+  // 5. Builder Reputation (Unavailable from RPC)
+  const builderReputationScore = isRealOPN
+    ? { score: 0, weight: 0, isAvailable: false }
+    : { score: calculateBuilderReputation(address, random, false).score, weight: WEIGHTS.builderReputation, isAvailable: true };
+  if (builderReputationScore.isAvailable) availableCategories.push('builderReputation');
+
+  // 6. Credential Ownership (Unavailable from RPC)
+  const credentialOwnershipScore = isRealOPN
+    ? { score: 0, weight: 0, isAvailable: false }
+    : { score: calculateCredentialOwnership(address, random, false).score, weight: WEIGHTS.credentialOwnership, isAvailable: true };
+  if (credentialOwnershipScore.isAvailable) availableCategories.push('credentialOwnership');
+
+  // 7. DeFi Participation (Unavailable from RPC)
+  const defiParticipationScore = isRealOPN
+    ? { score: 0, weight: 0, isAvailable: false }
+    : { score: calculateDeFiParticipation(address, random, false).score, weight: WEIGHTS.defiParticipation, isAvailable: true };
+  if (defiParticipationScore.isAvailable) availableCategories.push('defiParticipation');
+
+  // Calculate Categories
   const categories: ScoreCategories = {
-    walletAge: calculateWalletAge(ageDays, random, hasRealData),
-    activityConsistency: calculateActivityConsistency(txCount, ageDays, random, hasRealData),
-    transactionHistory: calculateTransactionHistory(txCount, random, hasRealData),
-    ecosystemParticipation: calculateEcosystemParticipation(address, random, hasRealData),
-    builderReputation: calculateBuilderReputation(address, random, hasRealData),
-    credentialOwnership: calculateCredentialOwnership(address, random, hasRealData),
-    defiParticipation: calculateDeFiParticipation(address, random, hasRealData),
+    walletAge: walletAgeScore.isAvailable
+      ? calculateWalletAge(Math.floor(random() * 730) + 30, random, false)
+      : createUnavailableCategory('Wallet Age', 'Measures how long the wallet has been active on the network', WEIGHTS.walletAge),
+
+    activityConsistency: activityConsistencyScore.isAvailable
+      ? calculateActivityConsistency(Math.floor(random() * 500) + 1, Math.floor(random() * 730) + 30, random, false)
+      : createUnavailableCategory('Activity Consistency', 'Evaluates transaction frequency and pattern regularity', WEIGHTS.activityConsistency),
+
+    transactionHistory: transactionHistoryScore.isAvailable
+      ? calculateTransactionHistory(txCount ?? Math.floor(random() * 500) + 1, random, isRealOPN, balanceNum)
+      : createUnavailableCategory('Transaction History', 'Assesses volume and diversity of on-chain activity', WEIGHTS.transactionHistory),
+
+    ecosystemParticipation: ecosystemParticipationScore.isAvailable
+      ? calculateEcosystemParticipation(address, random, false)
+      : createUnavailableCategory('Ecosystem Participation', 'Measures engagement with the OPN ecosystem and community', WEIGHTS.ecosystemParticipation),
+
+    builderReputation: builderReputationScore.isAvailable
+      ? calculateBuilderReputation(address, random, false)
+      : createUnavailableCategory('Builder Reputation', 'Evaluates participation in the OPN Builder Programme', WEIGHTS.builderReputation),
+
+    credentialOwnership: credentialOwnershipScore.isAvailable
+      ? calculateCredentialOwnership(address, random, false)
+      : createUnavailableCategory('Credential Ownership', 'Tracks on-chain credentials, badges, and soulbound tokens', WEIGHTS.credentialOwnership),
+
+    defiParticipation: defiParticipationScore.isAvailable
+      ? calculateDeFiParticipation(address, random, false)
+      : createUnavailableCategory('DeFi Participation', 'Measures interaction with DeFi protocols on OPN Chain', WEIGHTS.defiParticipation),
   };
-  
-  // Calculate weighted overall score
-  const overallScore = Math.round(
-    categories.walletAge.score * WEIGHTS.walletAge +
-    categories.activityConsistency.score * WEIGHTS.activityConsistency +
-    categories.transactionHistory.score * WEIGHTS.transactionHistory +
-    categories.ecosystemParticipation.score * WEIGHTS.ecosystemParticipation +
-    categories.builderReputation.score * WEIGHTS.builderReputation +
-    categories.credentialOwnership.score * WEIGHTS.credentialOwnership +
-    categories.defiParticipation.score * WEIGHTS.defiParticipation
-  );
+
+  // Calculate weighted overall score from available categories
+  const totalWeight = (transactionHistoryScore.isAvailable ? WEIGHTS.transactionHistory : 0) +
+                      (walletAgeScore.isAvailable ? WEIGHTS.walletAge : 0) +
+                      (activityConsistencyScore.isAvailable ? WEIGHTS.activityConsistency : 0) +
+                      (ecosystemParticipationScore.isAvailable ? WEIGHTS.ecosystemParticipation : 0) +
+                      (builderReputationScore.isAvailable ? WEIGHTS.builderReputation : 0) +
+                      (credentialOwnershipScore.isAvailable ? WEIGHTS.credentialOwnership : 0) +
+                      (defiParticipationScore.isAvailable ? WEIGHTS.defiParticipation : 0);
+
+  const weightedSum = (transactionHistoryScore.isAvailable ? transactionHistoryScore.score * WEIGHTS.transactionHistory : 0) +
+                      (walletAgeScore.isAvailable ? walletAgeScore.score * WEIGHTS.walletAge : 0) +
+                      (activityConsistencyScore.isAvailable ? activityConsistencyScore.score * WEIGHTS.activityConsistency : 0) +
+                      (ecosystemParticipationScore.isAvailable ? ecosystemParticipationScore.score * WEIGHTS.ecosystemParticipation : 0) +
+                      (builderReputationScore.isAvailable ? builderReputationScore.score * WEIGHTS.builderReputation : 0) +
+                      (credentialOwnershipScore.isAvailable ? credentialOwnershipScore.score * WEIGHTS.credentialOwnership : 0) +
+                      (defiParticipationScore.isAvailable ? defiParticipationScore.score * WEIGHTS.defiParticipation : 0);
+
+  const overallScore = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0;
   
   const riskLevel = getRiskLevel(overallScore);
   const badges = generateBadges(categories, address);
+
   const walletInfo: WalletInfo = {
     address,
     formattedAddress: `${address.slice(0, 6)}...${address.slice(-4)}`,
-    balance: String(balance),
-    transactionCount: txCount,
-    firstTransactionDate: realData?.firstTx ?? getDateDaysAgo(ageDays),
-    lastTransactionDate: realData?.lastTx ?? getDateDaysAgo(Math.floor(random() * 7)),
-    ageInDays: ageDays,
+    balance: isRealOPN ? rpcData.formattedBalance : Math.abs(random() * 10000).toFixed(2),
+    transactionCount: isRealOPN && typeof rpcData.transactionCount === 'number' ? rpcData.transactionCount : undefined,
+    ageInDays: isRealOPN ? undefined : Math.floor(random() * 730) + 30,
+    chainId: isRealOPN && typeof rpcData.chainId === 'number' ? rpcData.chainId : undefined,
+    latestBlock: isRealOPN && typeof rpcData.latestBlock === 'number' ? rpcData.latestBlock : undefined,
   };
+
+  const isPartial = isRealOPN && availableCategories.length < Object.keys(WEIGHTS).length;
   
   return {
     overallScore,
     riskLevel: riskLevel.level,
     riskColor: riskLevel.color,
     categories,
-    explanation: generateExplanation(overallScore, categories),
+    explanation: generateExplanation(overallScore, categories, isPartial),
     recommendations: generateRecommendations(categories),
     badges,
     walletInfo,
     analyzedAt: new Date().toISOString(),
-    isFallbackMode: !hasRealData,
+    isFallbackMode: !isRealOPN,
+    rpcStatus: rpcData?.rpcStatus ?? 'failure',
+    dataMode: isRealOPN ? 'REAL_OPN_DATA' : 'FALLBACK_DEMO_MODE',
+    isPartial,
+  };
+}
+
+function createUnavailableCategory(label: string, description: string, weight: number) {
+  return {
+    score: 0,
+    maxScore: 100,
+    weight,
+    label,
+    description,
+    details: ['Unavailable from RPC'],
   };
 }
 
@@ -162,7 +242,7 @@ function calculateActivityConsistency(txCount: number, ageDays: number, _random:
   };
 }
 
-function calculateTransactionHistory(txCount: number, random: () => number, _hasRealData: boolean): ScoreCategories['transactionHistory'] {
+function calculateTransactionHistory(txCount: number, random: () => number, _hasRealData: boolean, balance?: number): ScoreCategories['transactionHistory'] {
   let score: number;
   const details: string[] = [];
   
@@ -183,9 +263,30 @@ function calculateTransactionHistory(txCount: number, random: () => number, _has
     details.push(`Minimal: ${txCount} transactions`);
   }
   
-  const diversity = Math.floor(random() * 5) + 1;
-  const diversityLabels = ['Very Low', 'Low', 'Medium', 'High', 'Very High'];
-  details.push(`Transaction diversity: ${diversityLabels[Math.min(diversity - 1, 4)]}`);
+  if (!_hasRealData) {
+    const diversity = Math.floor(random() * 5) + 1;
+    const diversityLabels = ['Very Low', 'Low', 'Medium', 'High', 'Very High'];
+    details.push(`Transaction diversity: ${diversityLabels[Math.min(diversity - 1, 4)]}`);
+  } else {
+    details.push('Transaction diversity: Available via explorer');
+    if (balance !== undefined) {
+      if (balance > 1000) {
+        score = Math.min(100, score + 15);
+        details.push(`High balance impact: +15 points (${balance.toFixed(2)} OPN)`);
+      } else if (balance > 100) {
+        score = Math.min(100, score + 10);
+        details.push(`Moderate balance impact: +10 points (${balance.toFixed(2)} OPN)`);
+      } else if (balance > 10) {
+        score = Math.min(100, score + 5);
+        details.push(`Small balance impact: +5 points (${balance.toFixed(2)} OPN)`);
+      } else if (balance > 0) {
+        details.push(`Minimal balance: ${balance.toFixed(2)} OPN`);
+      } else {
+        score = Math.max(0, score - 5);
+        details.push('Zero balance impact: -5 points');
+      }
+    }
+  }
   
   return {
     score: Math.max(0, Math.min(100, Math.round(score))),
@@ -387,17 +488,24 @@ function generateBadges(categories: ScoreCategories, _address: string): Badge[] 
   return badges;
 }
 
-function generateExplanation(score: number, categories: ScoreCategories): string {
+function generateExplanation(score: number, categories: ScoreCategories, isPartial: boolean): string {
   const parts: string[] = [];
   
-  parts.push(`This wallet has an overall TrustScore of ${score}/100, indicating a ${getRiskLevel(score).level.toLowerCase()} risk profile.`);
+  if (isPartial) {
+    parts.push(`This wallet has a Partial TrustScore of ${score}/100 based on available RPC data, indicating a ${getRiskLevel(score).level.toLowerCase()} risk profile.`);
+  } else {
+    parts.push(`This wallet has an overall TrustScore of ${score}/100, indicating a ${getRiskLevel(score).level.toLowerCase()} risk profile.`);
+  }
   
-  // Find strongest category
-  const entries = Object.entries(categories);
-  const strongest = entries.reduce((a, b) => a[1].score > b[1].score ? a : b);
-  const weakest = entries.reduce((a, b) => a[1].score < b[1].score ? a : b);
+  // Find strongest/weakest from available categories
+  const entries = Object.entries(categories).filter(([_, cat]) => !cat.details.includes('Unavailable from RPC'));
   
-  parts.push(`The strongest area is ${strongest[1].label} (${strongest[1].score}/100), while ${weakest[1].label} (${weakest[1].score}/100) offers the most room for improvement.`);
+  if (entries.length > 0) {
+    const strongest = entries.reduce((a, b) => a[1].score > b[1].score ? a : b);
+    const weakest = entries.reduce((a, b) => a[1].score < b[1].score ? a : b);
+
+    parts.push(`The strongest area is ${strongest[1].label} (${strongest[1].score}/100), while ${weakest[1].label} (${weakest[1].score}/100) offers the most room for improvement.`);
+  }
   
   if (score >= 80) {
     parts.push('This is a well-established wallet with strong on-chain history and ecosystem participation.');
@@ -451,8 +559,3 @@ function generateRecommendations(categories: ScoreCategories): string[] {
   return recommendations;
 }
 
-function getDateDaysAgo(days: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return date.toISOString().split('T')[0];
-}
