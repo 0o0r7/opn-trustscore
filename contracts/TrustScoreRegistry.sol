@@ -132,9 +132,10 @@ contract TrustScoreRegistry {
     
     // ============ Constructor ============
     
-    constructor() {
-        owner = msg.sender;
-        authorizedIssuers[msg.sender] = true;
+    constructor(address initialOwner) {
+        require(initialOwner != address(0), "TrustScoreRegistry: initial owner is zero address");
+        owner = initialOwner;
+        authorizedIssuers[initialOwner] = true;
         
         // Register default badge types
         _registerBadgeType("verified_builder", "Verified Builder");
