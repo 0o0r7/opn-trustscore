@@ -242,16 +242,43 @@ The built `dist/` folder can be deployed to any static hosting service:
 - Cloudflare Pages
 - IPFS
 
-### Contract Deployment
+### Smart Contract Deployment
 
-To deploy TrustScoreRegistry.sol to OPN Testnet:
+To deploy `TrustScoreRegistry.sol` to OPN Testnet, follow these steps:
+
+#### 1. Environment Setup
+
+Create or update your `.env` file with the following variables:
+- `OPN_RPC_URL`: The RPC URL for OPN Testnet (`https://testnet-rpc.iopn.tech`).
+- `PRIVATE_KEY`: The private key of your **temporary deployer wallet**.
+- `INITIAL_OWNER_ADDRESS`: The address of the **permanent owner wallet** (this wallet will be granted administrative rights and authorized as an issuer upon deployment).
+
+#### 2. Security Best Practices
+
+- **NEVER** commit your `.env` file or private keys to version control.
+- **NEVER** paste your private keys into AI tools or share them online.
+- **Use a temporary deployer wallet:** Use a fresh wallet for deployment and fund it only with a small amount of OPN tokens needed for gas.
+- **Separation of Concerns:** The deployer wallet is only used to pay for the contract creation. The `INITIAL_OWNER_ADDRESS` should be your secure, permanent project wallet.
+
+#### 3. Deployment Commands
 
 ```bash
-# Using Hardhat or Foundry
-npx hardhat run scripts/deploy.ts --network opn-testnet
+# Install dependencies
+npm install
+
+# Compile the contract
+npx hardhat compile
+
+# Deploy to OPN Testnet
+npx hardhat run scripts/deploy.ts --network opnTestnet
 ```
 
-Update the `NEXT_PUBLIC_TRUSTSCORE_REGISTRY_ADDRESS` environment variable with the deployed address.
+#### 4. Post-Deployment
+
+After a successful deployment:
+1. Copy the deployed contract address from the console output.
+2. Update your `NEXT_PUBLIC_TRUSTSCORE_REGISTRY_ADDRESS` in `.env` with this new address.
+3. Your permanent owner wallet (set as `INITIAL_OWNER_ADDRESS`) now has full control over the registry.
 
 ## Real OPN Data vs. Fallback Demo Mode
 
