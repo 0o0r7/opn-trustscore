@@ -35,7 +35,7 @@ OPN TrustScore provides:
 
 ### 2. Wallet Analysis
 - Manual address input with validation
-- WalletConnect/injected wallet connection via wagmi
+- Injected wallet connection (e.g., MetaMask desktop or browser extension)
 - Instant analysis with fallback demo mode
 
 ### 3. TrustScore Dashboard
@@ -190,7 +190,13 @@ The `lib/opn.ts` file exports a wagmi config with OPN Testnet as the default cha
 ### Prerequisites
 - Node.js 18+
 - npm or yarn
-- MetaMask or compatible Web3 wallet
+- MetaMask (browser extension or desktop)
+
+### Wallet Connection & Analysis
+
+- **Injected Wallets:** The "Connect Wallet" feature supports injected providers such as the MetaMask desktop extension or built-in browsers of mobile wallets.
+- **Mobile Support:** Standard mobile browsers (like Chrome on Android or Safari on iOS) may not support "Connect Wallet" because they lack an injected Web3 provider.
+- **Recommended Method:** Manual wallet address analysis is the recommended universal method for all devices and browsers. Simply enter any OPN wallet address into the search field to begin analysis.
 
 ### Installation
 
@@ -206,7 +212,7 @@ npm install
 npm run dev
 ```
 
-The app will be available at `http://localhost:5173`.
+The app will be available at `http://localhost:3000`.
 
 ### Environment Variables
 

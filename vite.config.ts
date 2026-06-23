@@ -5,6 +5,7 @@ import { inspectAttr } from 'kimi-plugin-inspect-react'
 
 // https://vite.dev/config/
 export default defineConfig({
+  envPrefix: ["VITE_", "NEXT_PUBLIC_"],
   base: './',
   plugins: [inspectAttr(), react()],
   server: {
